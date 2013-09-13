@@ -1,0 +1,100 @@
+<?php
+
+/**
+ * @file
+ */
+
+/**
+ * Implements hook_install()
+ */
+function commerce_alipay_logistics_install() {
+  // create logistics company vocabulary
+  $vocabulary = new stdClass();
+  $vocabulary->name = t('Logistics company');
+  $vocabulary->machine_name = 'commerce_logistics_compnay';
+  $vocabulary->description = t('Logistics companies that to delivery the orders');
+
+  taxonomy_vocabulary_save($vocabulary);
+
+  // create all fields
+  foreach (_commerce_alipay_logistics_fields() as $field_name => $field) {
+    if (field_info_field($field_name) === NULL) {
+      field_create_field($field);
+    }
+  }
+
+  // create all instances
+  foreach (_commerce_alipay_logistics_instances() as $instance_name => $instance) {
+    $instance['entity_type'] = 'commerce_order';
+    $instance['bundle'] = 'commerce_order';
+    if (field_info_instance('commerce_order', $field_name, 'commerce_order') === NULL) {
+      field_create_instance($instance);
+    }
+  }
+}
+
+/**
+ * Implements hook_uninstall()
+ */
+function commerce_alipay_logistics_uninstall() {
+  // delete all instances
+  foreach (_commerce_alipay_logistics_instances() as $instance_name => $instance) {
+    $instance['entity_type'] = 'commerce_order';
+    $instance['bundle'] = 'commerce_order';
+    if (field_info_instance('commerce_order', $field_name, 'commerce_order') !== NULL) {
+      field_delete_instance($instance, TRUE);
+    }
+  }
+}
+
+/**
+ * Installed fields
+ */
+function _commerce_alipay_logistics_fields() {
+  return array(
+    'commerce_order_logistics_no' => array(
+      'field_name' => 'commerce_order_logistics_no',
+      'cardinality' => 1,
+      'locked' => FALSE,
+      'type' => 'text',
+    ),
+    'commerce_order_logistics_company' => array(
+      'field_name' => 'commerce_order_logistics_company',
+      'cardinality' => 1,
+      'locked' => FALSE,
+      'type' => 'taxonomy_term_reference',
+    ),
+  );
+}
+
+/**
+ * Installed instances
+ */
+function _commerce_alipay_logistics_instances() {
+  return array(
+    'commerce_order_logistics_no' => array(
+      'field_name' => 'commerce_order_logistics_no',
+      'label' => t('Logistics number'),
+      'required' => FALSE,
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+    ),
+    'commerce_order_logistics_company' => array(
+      'field_name' => 'commerce_order_logistics_company',
+      'label' => t('Logistics company'),
+      'required' => FALSE,
+      'widget' => array(
+        'type' => 'options_select',
+      ),
+      'settings' => array(
+        'allowed_values' => array(
+          array(
+            'vocabulary' => 'commerce_logistics_compnay',
+            'parent' => '0',
+          ),
+        ),
+      ),
+    ),
+  );
+}

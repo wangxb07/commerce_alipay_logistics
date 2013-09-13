@@ -1,0 +1,8 @@
+name = Commerce Alipay Logistics
+description = Implements alipay logistics notify.
+
+dependencies[] = commerce_order
+dependencies[] = commerce_alipay
+dependencies[] = rules
+
+core = 7.x

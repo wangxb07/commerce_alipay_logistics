@@ -1,0 +1,46 @@
+<?php
+
+/**
+ * @file
+ */
+
+/**
+ * Implements hook_menu()
+ */
+function commerce_alipay_logistics_menu() {
+  $items = array();
+
+  $items['commerce_alipay/logistics_send/%commerce_order'] = array(
+    'title' => "Alipay logistics send",
+    'page callback' => 'commerce_alipay_logistics_send_action',
+    'page arguments' => array(2),
+    'access callback' => TRUE,
+  );
+
+  return $items;
+}
+
+/**
+ * Send notify to alipay api.
+ */
+function commerce_alipay_logistics_send_action($order) {
+  if (empty($order)) {
+    return 404;
+  }
+  $rules = rules_config_load('commerce_payment_alipay');
+  $payment_instance_id = commerce_payment_method_instance_id('alipay', $rules);
+  $payment_method = commerce_payment_method_instance_load($payment_instance_id);
+
+  $settings = $payment_method['settings'];
+  return array();
+
+  $parameter = array(
+    "service" => "send_goods_confirm_by_platform",
+    "partner" => $settings['partner'],
+    "trade_no"	=> $trade_no,
+    "logistics_name" => $logistics_name,
+    "invoice_no" => $invoice_no,
+    "transport_type" => $transport_type,
+    "_input_charset" => strtolower('utf-8')
+  );
+}
