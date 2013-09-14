@@ -5,42 +5,102 @@
  */
 
 /**
- * Implements hook_menu()
+ * Implements hook_form_FORM_ID_alter()
  */
-function commerce_alipay_logistics_menu() {
-  $items = array();
-
-  $items['commerce_alipay/logistics_send/%commerce_order'] = array(
-    'title' => "Alipay logistics send",
-    'page callback' => 'commerce_alipay_logistics_send_action',
-    'page arguments' => array(2),
-    'access callback' => TRUE,
+function commerce_alipay_logistics_form_commerce_order_ui_order_form_alter(&$form, &$form_state, $form_id) {
+  $wrapper_id = 'logistics-info-container';
+  $form['logistics'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Logistics Info'),
+    '#prefix' => '<div id="' . $wrapper_id . '">',
+    '#suffix' => '</div>',
   );
+  $form['logistics']['commerce_order_logistics_no'] = $form['commerce_order_logistics_no'];
+  $form['logistics']['commerce_order_logistics_company'] = $form['commerce_order_logistics_company'];
 
-  return $items;
+  unset($form['commerce_order_logistics_no']);
+  unset($form['commerce_order_logistics_company']);
+
+  $form['logistics']['actions'] = array();
+
+  $form['logistics']['actions']['logistics_submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Submit'),
+    '#ajax' => array(
+      'callback' => 'commerce_alipay_logistics_send_info',
+      'wrapper' => $wrapper_id,
+    ),
+    '#validate' => array('commerce_alipay_logistics_send_validate'),
+    '#submit' => array('commerce_alipay_logistics_send_submit'),
+  );
 }
 
 /**
- * Send notify to alipay api.
+ * Validate the logistics info in order
  */
-function commerce_alipay_logistics_send_action($order) {
-  if (empty($order)) {
-    return 404;
+function commerce_alipay_logistics_send_validate($form, &$form_state) {
+  $order = $form_state['commerce_order'];
+  $values = $form_state['values'];
+
+  if ($order->status != 'wait_send_goods') {
+    form_set_error('', t('Order status must be "Wait send goods"'));
   }
+  if (empty($values['commerce_order_logistics_no']['und']['0']['value'])) {
+    form_set_error('commerce_order_logistics_no[und][0][value]', t('Logistics number reqiured'));
+  }
+  if (empty($values['commerce_order_logistics_company']['und']['0']['tid'])) {
+    form_set_error('commerce_order_logistics_company[und]', t('Logistics company reqiured'));
+  }
+}
+
+function commerce_alipay_logistics_send_submit($form, $form_state) {
+  $order = $form_state['commerce_order'];
+  $values = $form_state['values'];
+
   $rules = rules_config_load('commerce_payment_alipay');
   $payment_instance_id = commerce_payment_method_instance_id('alipay', $rules);
   $payment_method = commerce_payment_method_instance_load($payment_instance_id);
 
   $settings = $payment_method['settings'];
-  return array();
+  // logistics nubmer
+  $logistics_no = $values['commerce_order_logistics_no']['und']['0']['value'];
+
+  $logistics_company_term = taxonomy_term_load($values['commerce_order_logistics_company']['und']['0']['tid']);
+  $logistics_company = $logistics_company_term->name;
+
+  $transaction = commerce_alipay_logistics_load_pending_transaction_by_order($order);
+  $trade_no = $transaction->remote_id;
 
   $parameter = array(
     "service" => "send_goods_confirm_by_platform",
     "partner" => $settings['partner'],
     "trade_no"	=> $trade_no,
-    "logistics_name" => $logistics_name,
-    "invoice_no" => $invoice_no,
-    "transport_type" => $transport_type,
+    "logistics_name" => $logistics_company,
+    "invoice_no" => $logistics_no,
+    "transport_type" => 'EXPRESS',
     "_input_charset" => strtolower('utf-8')
   );
+}
+
+/**
+ * Send logistics info to alipay
+ */
+function commerce_alipay_logistics_send_info($form, $form_state) {
+  return $form['logistics'];
+}
+
+/**
+ * Load last payment transaction by order
+ * @param stdClass $order
+ * @return
+ * Payment transaction of this order
+ */
+function commerce_alipay_logistics_load_pending_transaction_by_order($order) {
+  $query = db_select('commerce_payment_transaction', 'cpt')->fields('cpt')
+    ->condition('cpt.order_id', $order->order_id)
+    ->condition('cpt.status', 'pending')
+    ->condition('cpt.remote_status', 'WAIT_SELLER_SEND_GOODS');
+
+  $result = $query->execute()->fetchAssoc();
+  return $result;
 }
