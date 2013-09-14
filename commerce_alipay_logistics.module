@@ -15,6 +15,7 @@ function commerce_alipay_logistics_form_commerce_order_ui_order_form_alter(&$for
     '#prefix' => '<div id="' . $wrapper_id . '">',
     '#suffix' => '</div>',
   );
+
   $form['logistics']['commerce_order_logistics_no'] = $form['commerce_order_logistics_no'];
   $form['logistics']['commerce_order_logistics_company'] = $form['commerce_order_logistics_company'];
 
@@ -33,6 +34,12 @@ function commerce_alipay_logistics_form_commerce_order_ui_order_form_alter(&$for
     '#validate' => array('commerce_alipay_logistics_send_validate'),
     '#submit' => array('commerce_alipay_logistics_send_submit'),
   );
+
+  if ($form_state['commerce_order']->status == 'wait_buyer_confirm') {
+    $form['logistics']['commerce_order_logistics_no']['#disabled'] = TRUE;
+    $form['logistics']['commerce_order_logistics_company']['#disabled'] = TRUE;
+    $form['logistics']['actions']['logistics_submit']['#disabled'] = TRUE;
+  }
 }
 
 /**
@@ -57,6 +64,12 @@ function commerce_alipay_logistics_send_submit($form, $form_state) {
   $order = $form_state['commerce_order'];
   $values = $form_state['values'];
 
+  $transaction = commerce_alipay_logistics_load_pending_transaction_by_order($order);
+  if (empty($transaction)) {
+    form_set_error('', t('Please check this order payment methods.'));
+    return FALSE;
+  }
+
   $rules = rules_config_load('commerce_payment_alipay');
   $payment_instance_id = commerce_payment_method_instance_id('alipay', $rules);
   $payment_method = commerce_payment_method_instance_load($payment_instance_id);
@@ -67,8 +80,6 @@ function commerce_alipay_logistics_send_submit($form, $form_state) {
 
   $logistics_company_term = taxonomy_term_load($values['commerce_order_logistics_company']['und']['0']['tid']);
   $logistics_company = $logistics_company_term->name;
-
-  $transaction = commerce_alipay_logistics_load_pending_transaction_by_order($order);
 
   $data = array(
     "service" => "send_goods_confirm_by_platform",
@@ -106,9 +117,15 @@ function _commerce_alipay_logistics_send_request($params) {
   curl_close($curl);
 
   $xml = simplexml_load_string($response);
-  if ($xml->is_success == 'T') {
-    drupal_set_message(t('Logistics send success'), 'status');
-    return TRUE;
+  if (!empty($xml)) {
+    if ($xml->is_success == 'T') {
+      drupal_set_message(t('Logistics send success'), 'status');
+      return TRUE;
+    }
+    else {
+      drupal_set_message(t('Remote error: %error', array('%error' => $xml->error)), 'error');
+      return FALSE;
+    }
   }
   else {
     drupal_set_message(t('Logistics send failure, please check the log'), 'error');
