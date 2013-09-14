@@ -9,12 +9,14 @@
  */
 function commerce_alipay_logistics_install() {
   // create logistics company vocabulary
-  $vocabulary = new stdClass();
-  $vocabulary->name = t('Logistics company');
-  $vocabulary->machine_name = 'commerce_logistics_compnay';
-  $vocabulary->description = t('Logistics companies that to delivery the orders');
+  if (!taxonomy_vocabulary_machine_name_load('commerce_logistics_company')) {
+    $vocabulary = new stdClass();
+    $vocabulary->name = t('Logistics company');
+    $vocabulary->machine_name = 'commerce_logistics_company';
+    $vocabulary->description = t('Logistics companies that to delivery the orders');
 
-  taxonomy_vocabulary_save($vocabulary);
+    taxonomy_vocabulary_save($vocabulary);
+  }
 
   // create all fields
   foreach (_commerce_alipay_logistics_fields() as $field_name => $field) {
@@ -90,11 +92,11 @@ function _commerce_alipay_logistics_instances() {
       'settings' => array(
         'allowed_values' => array(
           array(
-            'vocabulary' => 'commerce_logistics_compnay',
+            'vocabulary' => 'commerce_logistics_company',
             'parent' => '0',
           ),
         ),
-      ),
+      )
     ),
   );
 }
