@@ -5,6 +5,56 @@
  */
 
 /**
+ * Implements hook_commerce_payment_method_info_alter()
+ */
+function commerce_alipay_logistics_commerce_payment_method_info_alter(&$payment_methods) {
+  $payment_methods['alipay']['callbacks']['settings_form'] = 'commerce_alipay_logistics_settings_form';
+}
+
+/**
+ * Payment method callback: settings form.
+ * Override commerce_alipay_settings_form() to insert logistics settings
+ */
+function commerce_alipay_logistics_settings_form($settings = NULL) {
+  $form = commerce_alipay_settings_form($settings);
+  $form['receive_settings'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Receive settings'),
+    '#states' => array(
+      'visible' => array(
+        ':input[name="parameter[payment_method][settings][payment_method][settings][service]"]' => array(
+          array('value' => 'create_partner_trade_by_buyer'),
+          array('value' => 'trade_create_by_buyer'),
+        ),
+      ),
+    ),
+  );
+
+  $shipping_fields = field_info_instances('commerce_customer_profile', 'shipping');
+  $field_options = array('0' => t('--Empty--'));
+  foreach (array_keys($shipping_fields) as $machine_name) {
+    $field_options[$machine_name] = $machine_name;
+  }
+
+  $form['receive_settings']['mobile_field'] = array(
+    '#type' => 'select',
+    '#title' => t('Mobile field'),
+    '#description' => t('Specify a field, identifies receive mobile'),
+    '#default_value' => isset($settings['receive_settings']['mobile_field']) ? $settings['receive_settings']['mobile_field'] : 0,
+    '#options' => $field_options,
+  );
+  $form['receive_settings']['phone_field'] = array(
+    '#type' => 'select',
+    '#title' => t('Phone field'),
+    '#description' => t('Specify a field, identifies receive phone number'),
+    '#default_value' => isset($settings['receive_settings']['phone_field'])?$settings['receive_settings']['phone_field']:0,
+    '#options' => $field_options,
+  );
+
+  return $form;
+}
+
+/**
  * Implements hook_form_FORM_ID_alter()
  */
 function commerce_alipay_logistics_form_commerce_order_ui_order_form_alter(&$form, &$form_state, $form_id) {
@@ -154,4 +204,53 @@ function commerce_alipay_logistics_load_pending_transaction_by_order($order) {
     ->condition('cpt.remote_status', 'WAIT_SELLER_SEND_GOODS');
 
   return $query->execute()->fetchAssoc();
+}
+
+/**
+ * alipay support trade_create_by_buyer alter
+ */
+function commerce_alipay_logistics_commerce_alipay_parameter_alter(&$data, $settings, $order) {
+  if ($settings['service'] == 'trade_create_by_buyer' || $settings['service'] == 'create_partner_trade_by_buyer') {
+    $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+
+    $logistics_fee = 0;
+
+    if ($settings['debug'] != TRUE) {
+      // 快递费用只可以有一个，取最后一个。
+      foreach ($order_wrapper->commerce_line_items as $line_item) {
+        if ($line_item->type->value() == 'shipping') {
+          $commerce_total = $line_item->commerce_total->value();
+          $logistics_fee = commerce_currency_amount_to_decimal($commerce_total['amount'], $commerce_total['currency_code']);
+        }
+      }
+    }
+
+    $data['price'] = $data['total_fee'] - $logistics_fee;
+    $data['quantity'] = 1;
+
+    $data['logistics_type'] = 'EXPRESS';
+    $data['logistics_fee'] = number_format($logistics_fee, 2);
+    $data['logistics_payment'] = 'BUYER_PAY';
+
+    // receive infos
+    if (isset($order_wrapper->commerce_customer_shipping)) {
+
+      $shipping = $order_wrapper->commerce_customer_shipping;
+
+      $address = $shipping->get('commerce_customer_address')->value();
+
+      if ($address) {
+        $data['receive_name'] = $address['name_line'];
+        $data['receive_address'] = $address['administrative_area'] . $address['locality'] . $address['thoroughfare'] . $address['premise'];
+        $data['receive_zip'] = $address['postal_code'];
+
+        if (isset($settings['receive_settings']['phone_field']) && !empty($settings['receive_settings']['phone_field'])) {
+          $data['receive_phone'] = $shipping->{$settings['receive_settings']['phone_field']}->value();
+        }
+        if (isset($settings['receive_settings']['mobile_field']) && !empty($settings['receive_settings']['mobile_field'])) {
+          $data['receive_mobile'] = $shipping->{$settings['receive_settings']['mobile_field']}->value();
+        }
+      }
+    }
+  }
 }
