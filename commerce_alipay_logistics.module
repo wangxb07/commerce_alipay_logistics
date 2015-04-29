@@ -114,7 +114,21 @@ function commerce_alipay_logistics_send_submit($form, $form_state) {
   $order = $form_state['commerce_order'];
   $values = $form_state['values'];
 
+  // logistics nubmer
+  $logistics_no = $values['commerce_order_logistics_no']['und']['0']['value'];
+
+  $logistics_company_term = taxonomy_term_load($values['commerce_order_logistics_company']['und']['0']['tid']);
+  $logistics_company = $logistics_company_term->name;
+
+  commerce_alipay_logistics_api_invoke($order, $logistics_no, $logistics_company);
+}
+
+/**
+ * Process data of order and send the request
+ */
+function commerce_alipay_logistics_api_invoke($order, $logistics_no, $logistics_company) {
   $transaction = commerce_alipay_logistics_load_pending_transaction_by_order($order);
+
   if (empty($transaction)) {
     form_set_error('', t('Please check this order payment methods.'));
     return FALSE;
@@ -125,11 +139,6 @@ function commerce_alipay_logistics_send_submit($form, $form_state) {
   $payment_method = commerce_payment_method_instance_load($payment_instance_id);
 
   $settings = $payment_method['settings'];
-  // logistics nubmer
-  $logistics_no = $values['commerce_order_logistics_no']['und']['0']['value'];
-
-  $logistics_company_term = taxonomy_term_load($values['commerce_order_logistics_company']['und']['0']['tid']);
-  $logistics_company = $logistics_company_term->name;
 
   $data = array(
     "service" => "send_goods_confirm_by_platform",
@@ -142,6 +151,7 @@ function commerce_alipay_logistics_send_submit($form, $form_state) {
   );
   $data['sign'] = commerce_alipay_sign($settings['key'], $data);
   $data['sign_type'] = 'MD5';
+
   _commerce_alipay_logistics_send_request($data);
 }
 
