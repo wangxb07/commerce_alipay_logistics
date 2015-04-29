@@ -58,6 +58,8 @@ function commerce_alipay_logistics_settings_form($settings = NULL) {
  * Implements hook_form_FORM_ID_alter()
  */
 function commerce_alipay_logistics_form_commerce_order_ui_order_form_alter(&$form, &$form_state, $form_id) {
+  $order = $form_state['commerce_order'];
+
   $wrapper_id = 'logistics-info-container';
   $form['logistics'] = array(
     '#type' => 'fieldset',
@@ -72,24 +74,39 @@ function commerce_alipay_logistics_form_commerce_order_ui_order_form_alter(&$for
   unset($form['commerce_order_logistics_no']);
   unset($form['commerce_order_logistics_company']);
 
-  $form['logistics']['actions'] = array();
+  if (commerce_alipay_logistics_is_enable($order)) {
+    $form['logistics']['actions'] = array();
 
-  $form['logistics']['actions']['logistics_submit'] = array(
-    '#type' => 'submit',
-    '#value' => t('Submit'),
-    '#ajax' => array(
-      'callback' => 'commerce_alipay_logistics_send_info',
-      'wrapper' => $wrapper_id,
-    ),
-    '#validate' => array('commerce_alipay_logistics_send_validate'),
-    '#submit' => array('commerce_alipay_logistics_send_submit'),
-  );
+    $form['logistics']['actions']['logistics_submit'] = array(
+      '#type' => 'submit',
+      '#value' => t('Submit'),
+      '#ajax' => array(
+        'callback' => 'commerce_alipay_logistics_send_info',
+        'wrapper' => $wrapper_id,
+      ),
+      '#validate' => array('commerce_alipay_logistics_send_validate'),
+      '#submit' => array('commerce_alipay_logistics_send_submit'),
+    );
 
-  if ($form_state['commerce_order']->status == 'wait_buyer_confirm') {
-    $form['logistics']['commerce_order_logistics_no']['#disabled'] = TRUE;
-    $form['logistics']['commerce_order_logistics_company']['#disabled'] = TRUE;
-    $form['logistics']['actions']['logistics_submit']['#disabled'] = TRUE;
+    if ($form_state['commerce_order']->status == 'wait_buyer_confirm') {
+      $form['logistics']['commerce_order_logistics_no']['#disabled'] = TRUE;
+      $form['logistics']['commerce_order_logistics_company']['#disabled'] = TRUE;
+      $form['logistics']['actions']['logistics_submit']['#disabled'] = TRUE;
+    }
   }
+}
+
+/**
+ * Helper function decide logistics function is enable
+ */
+function commerce_alipay_logistics_is_enable($order) {
+  if (isset($order->data['payment_method'])) {
+    $payment_method = commerce_payment_method_instance_load($order->data['payment_method']);
+    if ($payment_method['base'] == 'commerce_alipay') {
+      return in_array($payment_method['settings']['service'], array('trade_create_by_buyer', 'create_partner_trade_by_buyer'));
+    }
+  }
+  return FALSE;
 }
 
 /**
